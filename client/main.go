@@ -15,41 +15,47 @@ import (
 )
 
 const (
-	width  = 80
-	height = 24
-	bgColor = "\033[48;5;235m" // Background color
-	resetColor = "\033[0m"     // Reset color
+	width       = 80
+	height      = 24
+	bgColor     = "\033[48;5;235m" // Background color
+	resetColor  = "\033[0m"        // Reset color
+	paddleHeight = 3
 )
 
-func clearScreen() {
-	cmd := exec.Command("clear")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
+var player int
+
+func moveToTopLeft() {
+	fmt.Print("\033[H")
 }
 
 func drawGame(paddle1Y, paddle2Y, ballX, ballY int) {
-	clearScreen()
+	var buffer strings.Builder
+
+	buffer.WriteString(fmt.Sprintf("Player %d\n", player)) // Display player number
 
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			fmt.Print(bgColor) // Set background color
+			buffer.WriteString(bgColor) // Set background color
 			if y == 0 || y == height-1 {
-				fmt.Print("-") // Top and bottom borders
+				buffer.WriteString("-") // Top and bottom borders
 			} else if x == 0 || x == width-1 {
-				fmt.Print("|") // Left and right borders
-			} else if x == 2 && y == paddle1Y {
-				fmt.Print("|") // Paleta 1
-			} else if x == width-3 && y == paddle2Y {
-				fmt.Print("|") // Paleta 2
+				buffer.WriteString("|") // Left and right borders
+			} else if x == 2 && y >= paddle1Y && y < paddle1Y+paddleHeight {
+				buffer.WriteString("|") // Paleta 1
+			} else if x == width-3 && y >= paddle2Y && y < paddle2Y+paddleHeight {
+				buffer.WriteString("|") // Paleta 2
 			} else if x == ballX && y == ballY {
-				fmt.Print("O") // Pelota
+				buffer.WriteString("O") // Pelota
 			} else {
-				fmt.Print(" ")
+				buffer.WriteString(" ")
 			}
-			fmt.Print(resetColor) // Reset color
+			buffer.WriteString(resetColor) // Reset color
 		}
-		fmt.Println()
+		buffer.WriteString("\n")
 	}
+
+	moveToTopLeft()
+	fmt.Print(buffer.String())
 }
 
 func setRawMode() {
@@ -60,7 +66,14 @@ func setRawMode() {
 }
 
 func main() {
-	conn, err := net.Dial("tcp", "localhost:9000")
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: go run main.go <server_ip> <server_port>")
+		return
+	}
+	serverIP := os.Args[1]
+	serverPort := os.Args[2]
+
+	conn, err := net.Dial("tcp", serverIP+":"+serverPort)
 	if err != nil {
 		log.Fatal("No se pudo conectar al servidor:", err)
 	}
@@ -75,6 +88,10 @@ func main() {
 			conn.Write([]byte{input}) // Enviar solo la primera letra ("w" o "s")
 		}
 	}()
+
+	// Receive player number from server
+	playerMessage, _ := bufio.NewReader(conn).ReadString('\n')
+	player, _ = strconv.Atoi(strings.TrimSpace(playerMessage))
 
 	for {
 		message, _ := bufio.NewReader(conn).ReadString('\n')

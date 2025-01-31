@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
@@ -16,6 +17,8 @@ type GameState struct {
 	BallDY   float64
 }
 
+const paddleHeight = 3
+
 var (
 	state   = GameState{}
 	clients = make(map[net.Conn]int)
@@ -25,6 +28,9 @@ var (
 func handleClient(conn net.Conn, player int) {
 	defer conn.Close()
 	fmt.Println("Player", player, "connected")
+
+	// Send player number to client
+	fmt.Fprintf(conn, "%d\n", player)
 
 	if player == 2 {
 		mu.Lock()
@@ -48,13 +54,21 @@ func handleClient(conn net.Conn, player int) {
 		fmt.Println("Player", player, "pressed", string(buf))
 		mu.Lock()
 		if player == 1 && buf[0] == 'w' {
-			state.Paddle1Y -= 1
+			if state.Paddle1Y > 0 {
+				state.Paddle1Y -= 1
+			}
 		} else if player == 1 && buf[0] == 's' {
-			state.Paddle1Y += 1
+			if state.Paddle1Y < 23-paddleHeight {
+				state.Paddle1Y += 1
+			}
 		} else if player == 2 && buf[0] == 'w' {
-			state.Paddle2Y -= 1
+			if state.Paddle2Y > 0 {
+				state.Paddle2Y -= 1
+			}
 		} else if player == 2 && buf[0] == 's' {
-			state.Paddle2Y += 1
+			if state.Paddle2Y < 23-paddleHeight {
+				state.Paddle2Y += 1
+			}
 		}
 		mu.Unlock()
 	}
@@ -80,21 +94,21 @@ func gameLoop() {
 
 		// Rebote en bordes horizontales y paletas
 		if state.BallX <= 3 {
-			if state.BallY >= state.Paddle1Y-1 && state.BallY <= state.Paddle1Y+1 {
+			if state.BallY >= state.Paddle1Y && state.BallY <= state.Paddle1Y+paddleHeight {
 				state.BallDX = -state.BallDX
 			} else {
 				state.BallX = 40
 				state.BallY = 12
-				state.BallDX = -state.BallDX
+				state.BallDX = 1
 				state.BallDY = 1
 			}
 		} else if state.BallX >= 76 {
-			if state.BallY >= state.Paddle2Y-1 && state.BallY <= state.Paddle2Y+1 {
+			if state.BallY >= state.Paddle2Y && state.BallY <= state.Paddle2Y+paddleHeight {
 				state.BallDX = -state.BallDX
 			} else {
 				state.BallX = 40
 				state.BallY = 12
-				state.BallDX = -state.BallDX
+				state.BallDX = -1
 				state.BallDY = 1
 			}
 		}
@@ -109,20 +123,26 @@ func gameLoop() {
 }
 
 func main() {
-	listener, err := net.Listen("tcp", ":9000")
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run main.go <port>")
+		return
+	}
+	port := os.Args[1]
+
+	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		fmt.Println("Error al iniciar servidor:", err)
 		return
 	}
 	defer listener.Close()
 
-	fmt.Println("Servidor iniciado en el puerto 9000")
+	fmt.Println("Servidor iniciado en el puerto", port)
 	go gameLoop()
 
 	player := 1
 	for {
 		conn, err := listener.Accept()
-		if err != nil {
+		if (err != nil) {
 			fmt.Println("Error en conexión:", err)
 			continue
 		}
