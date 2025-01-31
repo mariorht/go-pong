@@ -136,13 +136,26 @@ func main() {
 	}
 	defer listener.Close()
 
-	fmt.Println("Servidor iniciado en el puerto", port)
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		fmt.Println("Error al obtener la IP:", err)
+		return
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				fmt.Println("Servidor iniciado en la IP", ipnet.IP.String(), "y puerto", port)
+			}
+		}
+	}
+
 	go gameLoop()
 
 	player := 1
 	for {
 		conn, err := listener.Accept()
-		if (err != nil) {
+		if err != nil {
 			fmt.Println("Error en conexión:", err)
 			continue
 		}
